@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import 'package:file_picker/file_picker.dart';
 import '../models/employee_model.dart';
 import '../db/database_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:csv/csv.dart';
 
 class ManageEmployeeScreen extends StatefulWidget {
   const ManageEmployeeScreen({super.key});
@@ -181,6 +185,159 @@ Future<void> _pickPhoto() async {
     });
   }
 
+  Future<void> _exportToExcel() async {
+    try {
+      final employees = await DatabaseHelper.instance.getAllEmployees();
+
+      // Buat workbook baru
+      final workbook = xlsio.Workbook();
+      final sheet = workbook.worksheets[0];
+      sheet.name = 'Data Karyawan';
+
+      // Header kolom
+      final headers = [
+        'ID',
+        'Nama',
+        'No HP',
+        'Tempat Lahir',
+        'Tanggal Lahir',
+        'Alamat KTP',
+        'Alamat Sekarang',
+        'No KTA',
+        'KTA Expired',
+        'Tanggal Join',
+        'Penempatan',
+        'Status',
+        'BPJS Kesehatan',
+        'BPJS TK',
+        'Gaji Pokok',
+        'Tunj. Rumah',
+        'Tunj. Makan',
+        'Tunj. Transport',
+        'Tunj. Jabatan',
+        'Pot. BPJS Kes',
+        'Pot. BPJS TK',
+        'Take Home Pay'
+      ];
+
+      // Tulis header ke baris pertama
+      for (var i = 0; i < headers.length; i++) {
+        sheet.getRangeByIndex(1, i + 1).setText(headers[i]);
+        sheet.getRangeByIndex(1, i + 1).cellStyle.bold = true;
+      }
+
+      // Isi data karyawan
+      for (var row = 0; row < employees.length; row++) {
+        final e = employees[row];
+        final data = [
+          e.idCard,
+          e.name,
+          e.phone,
+          e.birthPlace,
+          e.birthDate,
+          e.addressKTP,
+          e.addressNow,
+          e.ktaNumber,
+          e.ktaExpired,
+          e.joinDate,
+          e.placement,
+          e.status,
+          e.bpjsHealth,
+          e.bpjsTK,
+          e.salaryBasic,
+          e.allowanceHouse,
+          e.allowanceMeal,
+          e.allowanceTransport,
+          e.allowancePosition,
+          e.deductionBPJSHealth,
+          e.deductionBPJSTK,
+          e.takeHomePay,
+        ];
+
+        for (var col = 0; col < data.length; col++) {
+          sheet.getRangeByIndex(row + 2, col + 1).setText(data[col]?.toString() ?? '');
+        }
+      }
+
+      // Simpan file ke direktori dokumen
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File("${dir.path}_Export.xlsx");
+      await file.writeAsBytes(bytes, flush: true);
+
+      // Notifikasi berhasil
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ Data berhasil diekspor ke: ${file.path}")),
+      );
+
+      debugPrint("📁 File disimpan di: ${file.path}");
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Gagal ekspor data: $e")),
+      );
+    }
+  }
+
+  Future<void> _importEmployeesFromCSV() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result == null) return; // batal pilih file
+
+      final file = File(result.files.single.path!);
+      final csvString = await file.readAsString();
+      final csvData = const CsvToListConverter().convert(csvString);
+
+      // Asumsikan baris pertama adalah header
+      for (int i = 1; i < csvData.length; i++) {
+        final row = csvData[i];
+
+        final employee = EmployeeModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          idCard: row[0].toString(),
+          name: row[1].toString(),
+          phone: row[2].toString(),
+          birthPlace: row[3].toString(),
+          birthDate: row[4].toString(),
+          addressKTP: row[5].toString(),
+          addressNow: row[6].toString(),
+          ktaNumber: row[7].toString(),
+          ktaExpired: row[8].toString(),
+          joinDate: row[9].toString(),
+          placement: row[10].toString(),
+          status: row[11].toString(),
+          bpjsHealth: row[12].toString(),
+          bpjsTK: row[13].toString(),
+          salaryBasic: double.tryParse(row[14].toString()) ?? 0.0,
+          allowanceHouse: double.tryParse(row[15].toString()) ?? 0.0,
+          allowanceMeal: double.tryParse(row[16].toString()) ?? 0.0,
+          allowanceTransport: double.tryParse(row[17].toString()) ?? 0.0,
+          allowancePosition: double.tryParse(row[18].toString()) ?? 0.0,
+          deductionBPJSHealth: double.tryParse(row[19].toString()) ?? 0.0,
+          deductionBPJSTK: double.tryParse(row[20].toString()) ?? 0.0,
+          takeHomePay: double.tryParse(row[21].toString()) ?? 0.0,
+          photoPath: '', // foto tidak diimpor
+        );
+
+        await DatabaseHelper.instance.insertEmployee(employee);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data karyawan berhasil diimport dari CSV!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengimpor data: $e')),
+      );
+    }
+  }
+
+
   void _clearForm() {
     _idController.clear();
     _nameController.clear();
@@ -280,6 +437,16 @@ Future<void> _pickPhoto() async {
                 ElevatedButton(
                   onPressed: _deleteEmployee,
                   child: const Text('Hapus'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _exportToExcel,
+                  child: const Text('Export'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _importEmployeesFromCSV,
+                  child: const Text('Import'),
                 ),
               ],
             ),
