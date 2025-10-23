@@ -272,22 +272,45 @@ double parseCurrency(TextEditingController controller) {
   }
 
 
-  // 🔹 Fungsi hapus karyawan
+    // 🔹 Fungsi hapus karyawan
   Future<void> _deleteEmployee() async {
     if (_selectedEmployee == null) return;
 
-    await DatabaseHelper.instance.deleteEmployee(_selectedEmployee!.id);
-    await _fetchEmployees();
+    try {
+      // 🔸 Hapus foto karyawan dari folder Document_Photo
+      if (_selectedEmployee!.photoPath.isNotEmpty) {
+        final file = File(_selectedEmployee!.photoPath);
+        if (await file.exists()) {
+          await file.delete();
+          debugPrint('🗑️ Foto dihapus: ${_selectedEmployee!.photoPath}');
+        } else {
+          debugPrint('⚠️ Foto tidak ditemukan di: ${_selectedEmployee!.photoPath}');
+        }
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Data karyawan berhasil dihapus!')),
-    );
+      // 🔸 Hapus data dari database
+      await DatabaseHelper.instance.deleteEmployee(_selectedEmployee!.id);
 
-    setState(() {
-      _selectedEmployee = null;
-      _isEditing = false;
-      _clearForm();
-    });
+      // 🔸 Refresh data karyawan
+      await _fetchEmployees();
+
+      // 🔸 Tampilkan notifikasi sukses
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data karyawan dan foto berhasil dihapus!')),
+      );
+
+      // 🔸 Reset state form
+      setState(() {
+        _selectedEmployee = null;
+        _isEditing = false;
+        _clearForm();
+      });
+    } catch (e) {
+      debugPrint('❌ Gagal menghapus karyawan: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menghapus karyawan: $e')),
+      );
+    }
   }
 
   Future<void> _exportToExcel() async {
@@ -527,22 +550,8 @@ double parseCurrency(TextEditingController controller) {
           ),
 
           // Tombol Edit / Hapus
-          if (_selectedEmployee != null)
             Row(
               children: [
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _isEditing = true;
-                    });
-                  },
-                  child: const Text('Edit'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _deleteEmployee,
-                  child: const Text('Hapus'),
-                ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _exportToExcel,
@@ -553,6 +562,25 @@ double parseCurrency(TextEditingController controller) {
                   onPressed: _importEmployeesFromCSV,
                   child: const Text('Import'),
                 ),
+                const SizedBox(width: 8),
+                if (_selectedEmployee != null)
+                Row(
+                  children: [
+                    ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _isEditing = true;
+                          });
+                        },
+                        child: const Text('Edit'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _deleteEmployee,
+                        child: const Text('Hapus'),
+                      ),
+                    ],
+                )
               ],
             ),
 
