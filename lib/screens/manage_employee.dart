@@ -18,6 +18,8 @@ class ManageEmployeeScreen extends StatefulWidget {
   State<ManageEmployeeScreen> createState() => _ManageEmployeeScreenState();
 }
 
+final _formatter = NumberFormat('#,###', 'id_ID');
+
 class _ManageEmployeeScreenState extends State<ManageEmployeeScreen> {
   List<EmployeeModel> _employees = [];
   EmployeeModel? _selectedEmployee;
@@ -54,6 +56,17 @@ class _ManageEmployeeScreenState extends State<ManageEmployeeScreen> {
   void initState() {
     super.initState();
     _fetchEmployees();
+    // Tambahkan formatter untuk semua field nominal
+    attachCurrencyFormatter(_bpjsHealthController);
+    attachCurrencyFormatter(_bpjsTKController);
+    attachCurrencyFormatter(_salaryBasicController);
+    attachCurrencyFormatter(_allowanceHouseController);
+    attachCurrencyFormatter(_allowanceMealController);
+    attachCurrencyFormatter(_allowanceTransportController);
+    attachCurrencyFormatter(_allowancePositionController);
+    attachCurrencyFormatter(_deductionBPJSHealthController);
+    attachCurrencyFormatter(_deductionBPJSTKController);
+    attachCurrencyFormatter(_takeHomePayController);
   }
 
   Future<void> _fetchEmployees() async {
@@ -72,6 +85,40 @@ Future<void> _pickPhoto() async {
       _photoPath = pickedFile.path; // simpan path untuk database
     });
   }
+}
+
+void attachCurrencyFormatter(TextEditingController controller) {
+  bool isFormatting = false; // untuk cegah loop listener
+
+  controller.addListener(() {
+    if (isFormatting) return;
+
+    final rawText = controller.text
+        .replaceAll('.', '')
+        .replaceAll('Rp', '')
+        .replaceAll(' ', '');
+    if (rawText.isEmpty) return;
+
+    final value = double.tryParse(rawText);
+    if (value == null) return;
+
+    final formatted = _formatter.format(value).replaceAll(',', '.');
+
+    if (formatted != controller.text) {
+      isFormatting = true;
+      controller.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+      isFormatting = false;
+    }
+  });
+}
+
+double parseCurrency(TextEditingController controller) {
+  return double.tryParse(
+    controller.text.replaceAll('.', '').replaceAll('Rp', '').trim(),
+  ) ?? 0.0;
 }
 
   // 🔹 Fungsi untuk pilih karyawan dari dropdown
@@ -95,15 +142,15 @@ Future<void> _pickPhoto() async {
       _statusController.text = employee.status;
       _bpjsHealthController.text = employee.bpjsHealth;
       _bpjsTKController.text = employee.bpjsTK;
-      _salaryBasicController.text = employee.salaryBasic.toString();
-      _allowanceHouseController.text = employee.allowanceHouse.toString();
-      _allowanceMealController.text = employee.allowanceMeal.toString();
-      _allowanceTransportController.text = employee.allowanceTransport.toString();
-      _allowancePositionController.text = employee.allowancePosition.toString();
-      _deductionBPJSHealthController.text = employee.deductionBPJSHealth.toString();
-      _deductionBPJSTKController.text = employee.deductionBPJSTK.toString();
-      _takeHomePayController.text = employee.takeHomePay.toString();
-      // ✅ Gunakan path dari database
+      _salaryBasicController.text = employee.salaryBasic.toStringAsFixed(0);
+      _allowanceHouseController.text = employee.allowanceHouse.toStringAsFixed(0);
+      _allowanceMealController.text = employee.allowanceMeal.toStringAsFixed(0);
+      _allowanceTransportController.text = employee.allowanceTransport.toStringAsFixed(0);
+      _allowancePositionController.text = employee.allowancePosition.toStringAsFixed(0);
+      _deductionBPJSHealthController.text = employee.deductionBPJSHealth.toStringAsFixed(0);
+      _deductionBPJSTKController.text = employee.deductionBPJSTK.toStringAsFixed(0);
+      _takeHomePayController.text = employee.takeHomePay.toStringAsFixed(0);
+      // ✅ Gunakan path dari database  
       _photoPath = employee.photoPath;
 
       // ✅ Reset foto sementara agar tidak menampilkan foto karyawan lain
@@ -113,13 +160,13 @@ Future<void> _pickPhoto() async {
 
   // 🔹 Fungsi untuk hitung otomatis TakeHomePay
   void _calculateTakeHome() {
-    double salary = double.tryParse(_salaryBasicController.text) ?? 0;
-    double house = double.tryParse(_allowanceHouseController.text) ?? 0;
-    double meal = double.tryParse(_allowanceMealController.text) ?? 0;
-    double transport = double.tryParse(_allowanceTransportController.text) ?? 0;
-    double position = double.tryParse(_allowancePositionController.text) ?? 0;
-    double bpjsHealth = double.tryParse(_allowanceTransportController.text) ?? 0;
-    double bpjsTK = double.tryParse(_allowancePositionController.text) ?? 0;
+    double salary = parseCurrency(_salaryBasicController);
+    double house = parseCurrency(_allowanceHouseController);
+    double meal = parseCurrency(_allowanceMealController);
+    double transport = parseCurrency(_allowanceTransportController);
+    double position = parseCurrency(_allowancePositionController);
+    double bpjsHealth = parseCurrency(_allowanceTransportController);
+    double bpjsTK = parseCurrency(_allowancePositionController);
 
     // double bpjsHealth = salary * 0.05;
     // double bpjsTK = salary * 0.03;
@@ -129,7 +176,8 @@ Future<void> _pickPhoto() async {
 
     double takeHome = salary + house + meal + transport + position + bpjsHealth + bpjsTK;
 
-    _takeHomePayController.text = takeHome.toStringAsFixed(0);
+    _takeHomePayController.text =
+        _formatter.format(takeHome).replaceAll(',', '.');
   }
 
   // 🔹 Fungsi simpan perubahan (update)
@@ -192,14 +240,14 @@ Future<void> _pickPhoto() async {
       status: _statusController.text,
       bpjsHealth: _bpjsHealthController.text,
       bpjsTK: _bpjsTKController.text,
-      salaryBasic: double.tryParse(_salaryBasicController.text) ?? 0.0,
-      allowanceHouse: double.tryParse(_allowanceHouseController.text) ?? 0.0,
-      allowanceMeal: double.tryParse(_allowanceMealController.text) ?? 0.0,
-      allowanceTransport: double.tryParse(_allowanceTransportController.text) ?? 0.0,
-      allowancePosition: double.tryParse(_allowancePositionController.text) ?? 0.0,
-      deductionBPJSHealth: double.tryParse(_deductionBPJSHealthController.text) ?? 0.0,
-      deductionBPJSTK: double.tryParse(_deductionBPJSTKController.text) ?? 0.0,
-      takeHomePay: double.tryParse(_takeHomePayController.text) ?? 0.0,
+      salaryBasic: parseCurrency(_salaryBasicController),
+      allowanceHouse: parseCurrency(_allowanceHouseController),
+      allowanceMeal: parseCurrency(_allowanceMealController),
+      allowanceTransport: parseCurrency(_allowanceTransportController),
+      allowancePosition: parseCurrency(_allowancePositionController),
+      deductionBPJSHealth: parseCurrency(_deductionBPJSHealthController),
+      deductionBPJSTK: parseCurrency(_deductionBPJSTKController),
+      takeHomePay: parseCurrency(_takeHomePayController),
       photoPath: finalPhotoPath.isNotEmpty
         ? finalPhotoPath
         : _selectedEmployee!.photoPath, // tetap pakai foto lama kalau tidak ganti
