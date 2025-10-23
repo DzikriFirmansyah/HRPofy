@@ -7,6 +7,9 @@ import '../db/database_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:csv/csv.dart';
+import 'package:path/path.dart' as path;
+import 'package:intl/intl.dart';
+
 
 class ManageEmployeeScreen extends StatefulWidget {
   const ManageEmployeeScreen({super.key});
@@ -100,7 +103,11 @@ Future<void> _pickPhoto() async {
       _deductionBPJSHealthController.text = employee.deductionBPJSHealth.toString();
       _deductionBPJSTKController.text = employee.deductionBPJSTK.toString();
       _takeHomePayController.text = employee.takeHomePay.toString();
+      // ✅ Gunakan path dari database
       _photoPath = employee.photoPath;
+
+      // ✅ Reset foto sementara agar tidak menampilkan foto karyawan lain
+      _photoFile = null;
     });
   }
 
@@ -120,7 +127,7 @@ Future<void> _pickPhoto() async {
     // _deductionBPJSHealthController.text = bpjsHealth.toStringAsFixed(0);
     // _deductionBPJSTKController.text = bpjsTK.toStringAsFixed(0);
 
-    double takeHome = salary + house + meal + transport + position - (bpjsHealth + bpjsTK);
+    double takeHome = salary + house + meal + transport + position + bpjsHealth + bpjsTK;
 
     _takeHomePayController.text = takeHome.toStringAsFixed(0);
   }
@@ -129,6 +136,46 @@ Future<void> _pickPhoto() async {
   Future<void> _updateEmployee() async {
     if (_selectedEmployee == null) return;
 
+    String finalPhotoPath = ''; // Local variable to hold the final saved photo path
+
+  //🔹 Jika ada foto yang dipilih, simpan ke folder `employee_photos`
+    if (_photoPath != null && _idController.text.isNotEmpty) {
+      try {
+        final directory = await getApplicationDocumentsDirectory();
+        final photosDir = Directory('${directory.path}_Photo');
+
+        // Buat folder jika belum ada
+        if (!await photosDir.exists()) {
+          await photosDir.create(recursive: true);
+        }
+
+        // Buat nama file berdasarkan ID Karyawan (clean special characters)
+        final safeId = _idController.text.replaceAll(RegExp(r'[^\w\s]'), ''); // Removed \s to allow spaces, but typically IDs are without spaces. If your IDs can have spaces, consider how you want to handle them in filenames.
+        final fileName = '$safeId.jpg';
+        final newPath = path.join(photosDir.path, fileName);
+
+        // 🔸 Jika ada foto lama dengan ID ini, hapus dulu (supaya tidak ada cache ganda)
+        final oldFile = File(newPath);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+
+        // Salin file ke folder tujuan
+        await File(_photoPath!).copy(newPath);
+
+        finalPhotoPath = newPath; // Store the actual saved path
+        debugPrint('✅ Foto berhasil disimpan di: $finalPhotoPath');
+      } catch (e) {
+        debugPrint('❌ Gagal menyimpan foto: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan foto: $e')),
+        );
+      } 
+    } else {
+        // 🔹 Kalau tidak ada foto baru, tetap gunakan foto lama
+        finalPhotoPath = _selectedEmployee!.photoPath;
+      }
+    
     final updatedEmployee = EmployeeModel(
       id: _selectedEmployee!.id,
       idCard: _idController.text,
@@ -153,7 +200,9 @@ Future<void> _pickPhoto() async {
       deductionBPJSHealth: double.tryParse(_deductionBPJSHealthController.text) ?? 0.0,
       deductionBPJSTK: double.tryParse(_deductionBPJSTKController.text) ?? 0.0,
       takeHomePay: double.tryParse(_takeHomePayController.text) ?? 0.0,
-      photoPath: _photoPath ?? '',
+      photoPath: finalPhotoPath.isNotEmpty
+        ? finalPhotoPath
+        : _selectedEmployee!.photoPath, // tetap pakai foto lama kalau tidak ganti
     );
 
     await DatabaseHelper.instance.updateEmployee(updatedEmployee);
@@ -162,10 +211,18 @@ Future<void> _pickPhoto() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Data karyawan berhasil diperbarui!')),
     );
+
+    setState(() {
+      _selectedEmployee = updatedEmployee; // refresh data terpilih
+      _photoFile = null; // hapus foto sementara
+      _photoPath = updatedEmployee.photoPath; // gunakan foto yang tersimpan di DB
+    });
+
     setState(() {
       _isEditing = false;
     });
   }
+
 
   // 🔹 Fungsi hapus karyawan
   Future<void> _deleteEmployee() async {
@@ -459,12 +516,22 @@ Future<void> _pickPhoto() async {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     // Foto
-                    _photoFile != null
-                        ? Image.file(_photoFile!, width: 150, height: 150, fit: BoxFit.cover)
-                        : _photoPath != null && _photoPath!.isNotEmpty
-                            ? Image.file(File(_photoPath!), width: 150, height: 150, fit: BoxFit.cover)
+                    (_photoFile != null)
+                        ? Image.file(
+                            _photoFile!,
+                            width: 150,
+                            height: 150,
+                            fit: BoxFit.cover,
+                          )
+                        : (_photoPath != null &&
+                                _photoPath!.isNotEmpty)
+                            ? Image.file(
+                                File(_photoPath!),
+                                width: 150,
+                                height: 150,
+                                fit: BoxFit.cover,
+                              )
                             : Container(
                                 width: 150,
                                 height: 150,
@@ -511,7 +578,7 @@ Future<void> _pickPhoto() async {
                     // Tanggal Lahir
                     TextField(
                       controller: _birthDateController,
-                      enabled: false,
+                      enabled: true,
                       onTap: () async {
                         DateTime? picked = await showDatePicker(
                           context: context,
@@ -560,7 +627,7 @@ Future<void> _pickPhoto() async {
                     // Tanggal KTA Expired
                     TextField(
                       controller: _ktaExpiredController,
-                      enabled: false,
+                      enabled: true,
                       onTap: () async {
                         DateTime? picked = await showDatePicker(
                           context: context,
@@ -586,7 +653,7 @@ Future<void> _pickPhoto() async {
                     // Tanggal Join
                     TextField(
                       controller: _joinDateController,
-                      enabled: false,
+                      enabled: true,
                       onTap: () async {
                         DateTime? picked = await showDatePicker(
                           context: context,
@@ -665,13 +732,13 @@ Future<void> _pickPhoto() async {
                     // Potongan BPJS
                     TextField(
                       controller: _deductionBPJSHealthController,
-                      enabled: false,
+                      enabled: true,
                       decoration: const InputDecoration(labelText: 'Potongan BPJS Kesehatan', prefixText: 'Rp ', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _deductionBPJSTKController,
-                      enabled: false,
+                      enabled: true,
                       decoration: const InputDecoration(labelText: 'Potongan BPJS TK', prefixText: 'Rp ', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),

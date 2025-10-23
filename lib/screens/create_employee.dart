@@ -8,6 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
+import 'package:intl/intl.dart';
+
 
 class CreateEmployeeScreen extends StatefulWidget {
   const CreateEmployeeScreen({super.key});
@@ -15,6 +17,8 @@ class CreateEmployeeScreen extends StatefulWidget {
   @override
   State<CreateEmployeeScreen> createState() => _CreateEmployeeScreenState();
 }
+
+final _formatter = NumberFormat('#,###', 'id_ID');
 
 class _CreateEmployeeScreenState extends State<CreateEmployeeScreen> {
   // 🔹 Semua controller untuk field karyawan
@@ -113,14 +117,14 @@ class _CreateEmployeeScreenState extends State<CreateEmployeeScreen> {
       status: _statusController.text,
       bpjsHealth: _bpjsHealthController.text,
       bpjsTK: _bpjsTKController.text,
-      salaryBasic: double.tryParse(_salaryBasicController.text) ?? 0.0,
-      allowanceHouse: double.tryParse(_allowanceHouseController.text) ?? 0.0,
-      allowanceMeal: double.tryParse(_allowanceMealController.text) ?? 0.0,
-      allowanceTransport: double.tryParse(_allowanceTransportController.text) ?? 0.0,
-      allowancePosition: double.tryParse(_allowancePositionController.text) ?? 0.0,
-      deductionBPJSHealth: double.tryParse(_deductionBPJSHealthController.text) ?? 0.0,
-      deductionBPJSTK: double.tryParse(_deductionBPJSTKController.text) ?? 0.0,
-      takeHomePay: double.tryParse(_takeHomePayController.text) ?? 0.0,
+      salaryBasic: parseCurrency(_salaryBasicController),
+      allowanceHouse: parseCurrency(_allowanceHouseController),
+      allowanceMeal: parseCurrency(_allowanceMealController),
+      allowanceTransport: parseCurrency(_allowanceTransportController),
+      allowancePosition: parseCurrency(_allowancePositionController),
+      deductionBPJSHealth: parseCurrency(_deductionBPJSHealthController),
+      deductionBPJSTK: parseCurrency(_deductionBPJSTKController),
+      takeHomePay: parseCurrency(_takeHomePayController),
       photoPath: finalPhotoPath, // <<< Use the local variable here
     );
 
@@ -140,15 +144,46 @@ class _CreateEmployeeScreenState extends State<CreateEmployeeScreen> {
     }
   }
 
+  void attachCurrencyFormatter(TextEditingController controller) {
+    bool isFormatting = false; // 🔒 mencegah format berulang
+
+    controller.addListener(() {
+      if (isFormatting) return;
+
+      final rawText = controller.text.replaceAll('.', '').replaceAll('Rp', '').replaceAll(' ', '');
+      if (rawText.isEmpty) return;
+
+      final value = double.tryParse(rawText);
+      if (value == null) return;
+
+      final formatted = _formatter.format(value).replaceAll(',', '.');
+
+      if (formatted != controller.text) {
+        isFormatting = true;
+        controller.value = TextEditingValue(
+          text: formatted,
+          selection: TextSelection.collapsed(offset: formatted.length),
+        );
+        isFormatting = false;
+      }
+    });
+  }
+
+double parseCurrency(TextEditingController controller) {
+  return double.tryParse(
+    controller.text.replaceAll('.', '').replaceAll('Rp', '').trim(),
+  ) ?? 0.0;
+}
+
   // 🔹 Fungsi hitung otomatis TakeHomePay
 void _calculateTakeHome() {
-  double salary = double.tryParse(_salaryBasicController.text) ?? 0;
-  double house = double.tryParse(_allowanceHouseController.text) ?? 0;
-  double meal = double.tryParse(_allowanceMealController.text) ?? 0;
-  double transport = double.tryParse(_allowanceTransportController.text) ?? 0;
-  double position = double.tryParse(_allowancePositionController.text) ?? 0;
-  double bpjsHealth = double.tryParse(_allowanceTransportController.text) ?? 0;
-  double bpjsTK = double.tryParse(_allowancePositionController.text) ?? 0;
+  double salary = parseCurrency(_salaryBasicController);
+  double house = parseCurrency(_allowanceHouseController);
+  double meal = parseCurrency(_allowanceMealController);
+  double transport = parseCurrency(_allowanceTransportController);
+  double position = parseCurrency(_allowancePositionController);
+  double bpjsHealth = parseCurrency(_deductionBPJSHealthController);
+  double bpjsTK = parseCurrency(_deductionBPJSTKController);
 
   // Hitung potongan BPJS (misal 5% dan 3% dari gaji)
   // double bpjsHealth = salary * 0.05;
@@ -157,9 +192,11 @@ void _calculateTakeHome() {
   // _deductionBPJSHealthController.text = bpjsHealth.toStringAsFixed(0);
   // _deductionBPJSTKController.text = bpjsTK.toStringAsFixed(0);
 
-  double takeHome = salary + house + meal + transport + position - (bpjsHealth + bpjsTK);
+  double takeHome = salary + house + meal + transport + position + bpjsHealth + bpjsTK;
 
-  _takeHomePayController.text = takeHome.toStringAsFixed(0);
+  _takeHomePayController.text = NumberFormat('#,###', 'id_ID')
+      .format(takeHome)
+      .replaceAll(',', '.');
 }
 
   @override
@@ -188,6 +225,23 @@ void _calculateTakeHome() {
     _takeHomePayController.dispose();
     super.dispose();
   }
+
+@override
+void initState() {
+  super.initState();
+
+  // Tambahkan formatter ke semua field nominal
+  attachCurrencyFormatter(_bpjsHealthController);
+  attachCurrencyFormatter(_bpjsTKController);
+  attachCurrencyFormatter(_salaryBasicController);
+  attachCurrencyFormatter(_allowanceHouseController);
+  attachCurrencyFormatter(_allowanceMealController);
+  attachCurrencyFormatter(_allowanceTransportController);
+  attachCurrencyFormatter(_allowancePositionController);
+  attachCurrencyFormatter(_deductionBPJSHealthController);
+  attachCurrencyFormatter(_deductionBPJSTKController);
+  attachCurrencyFormatter(_takeHomePayController);
+}
 
 @override
 Widget build(BuildContext context) {
